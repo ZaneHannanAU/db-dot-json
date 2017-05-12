@@ -1,0 +1,25 @@
+{
+  "name": "db-dot-json",
+  "version": "1.0.0",
+  "description": "A near fork of @Belphemur/node-json-db with more options and Bower/requireJS compatibility.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZaneHannanAU/db-dot-json.git"
+  },
+  "keywords": [
+    "db",
+    "json",
+    "fs",
+    "bower"
+  ],
+  "author": "zanehannanau",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/ZaneHannanAU/db-dot-json/issues"
+  },
+  "homepage": "https://github.com/ZaneHannanAU/db-dot-json#readme"
+}
