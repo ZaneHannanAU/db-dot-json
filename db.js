@@ -51,28 +51,20 @@ export default class DBDotJSON {
     const {
       file = filename, saveOnPush = true, saveOnDel = saveOnPush,
       init = {}, overwrite = true,
-      replacer = undefined, humanReadable = 0, reviver = undefined,
+      replacer = null, humanReadable = 0, reviver = null,
       exists = (file) => require('fs').existsSync(file),
       mkdir = (folder) => require('mkdirp').sync(folder),
       dirname = (dir) => require('path').dirname(dir),
       read = (name = file) => require('fs').readFileSync(name, 'utf8'),
-      save = (data,name=file) => require('fs').writeFileSync(name,data,'utf8')
-    } = opts
-
-    this.file = file
-    this.filename = file.endsWith('.json') ? file : (file+'.json')
-
-    this.loaded = false
-    this.state = init
-
-    Promise.resolve(exists(filename)).then(e => {
-      if (!e) {
-        let dir = typeof dirname === 'string' ? dirname : dirname(this.filename)
-        mkdir(dir)
-        this.save(true)
-        this.loaded = true
+      save = (data,name=file) => require('fs').writeFileSync(name,data,'utf8'),
+      presetup = () => {
+        try {
+          this.load()
+        } catch (e) {
+          this.save(true)
+        }
       }
-    })
+    } = opts
 
     this.opts = {
       filename, saveOnPush, saveOnDel, exists, mkdir,
@@ -80,10 +72,26 @@ export default class DBDotJSON {
         replacer, humanReadable, reviver
       }
     }
+    this.file = file
+    this.filename = file.endsWith('.json') ? file : (file+'.json')
+
+    this.loaded = false
+    this.state = init
 
     this.saveOnPush = this.opts.saveOnPush
     this.saveOnDel = this.opts.saveOnDel
     this.overwrite = this.opts.overwrite
+
+    if (typeof presetup === 'function')
+      presetup()
+
+    Promise.resolve(exists(filename)).then(e => {
+      if (!e) {
+        this.dirname = typeof dirname === 'string' ? dirname : dirname(filename)
+        mkdir(this.dirname)
+        this.save(true)
+      }
+    })
   }
 
   /**
@@ -105,9 +113,11 @@ export default class DBDotJSON {
     * @private
     */
   __getParentData(dataPath, create) {
-    var path = this.__processDataPath(dataPath)
-    var last = path.pop()
-    return new ParentData(last, this.__getData(path, create), this, dataPath)
+    let path = this.__processDataPath(dataPath)
+    let last = path.pop()
+    return this.__getData(path, create).then(
+      data => new ParentData(last, data, this, dataPath)
+    )
   }
 
   /**
@@ -121,7 +131,7 @@ export default class DBDotJSON {
     */
   getData(dataPath) {
     let path = this.__processDataPath(dataPath)
-    return this.__getData(path)
+    return Promise.resolve(this.__getData(path))
   }
 
   /**
@@ -221,9 +231,9 @@ export default class DBDotJSON {
       dbData.setData(toSet)
 
       if (save)
-        this.save()
+        return this.save()
 
-      return resolve(this)
+      return this
     });
   }
 
@@ -235,16 +245,19 @@ export default class DBDotJSON {
     */
   delete(dataPath, save = this.saveOnDel) {
     dataPath = utils.removeEdgeSlashes(dataPath)
-    var dbData = this.__getParentData(dataPath, true)
-    if (!dbData)
-      return this
+    return new Promise((resolve, reject) => {
+      this.__getParentData(dataPath, true).then(dbData => {
+        if (!dbData)
+          return resolve(this)
 
-    dbData.delete()
+        dbData.delete()
 
-    if (save)
-      this.save()
+        if (save)
+          this.save()
 
-    return this
+        return resolve(this)
+      })
+    });
   }
 
   /**
@@ -256,6 +269,14 @@ export default class DBDotJSON {
   reload() {
     this.loaded = false
     return this.load(true)
+  }
+  /**
+    * Reload the database from the file synchronously
+    * @returns {DBDotJSON}
+    */
+  reloadSync() {
+    this.loaded = false
+    return this.loadSync(true)
   }
 
   /**
@@ -270,7 +291,8 @@ export default class DBDotJSON {
       return Promise.resolve(this)
 
     this.loaded = false
-    return Promise.resolve(this.opts.read(this.filename)).then(data => {
+    return Promise.resolve(this.opts.read(this.filename))
+    .then(data => {
       this.state = JSON.parse(data, this.opts.json.reviver)
       this.loaded = true
       return this
@@ -280,6 +302,27 @@ export default class DBDotJSON {
       this.loaded = false
       throw err
     })
+  }
+  /**
+    * Manually load the database
+    * It is automatically called when the first getData is done
+    * @returns {DBDotJSON}
+    */
+  loadSync(force = false) {
+    if (this.loaded && !force)
+      return this
+
+    this.loaded = false
+    try {
+      var data = this.opts.read(this.filename)
+      this.state = JSON.parse(data, this.opts.json.reviver)
+      return this
+    } catch (error) {
+      var err = new DatabaseError("Couldn't load the Database.", 1, error)
+      err.inner = error
+      this.loaded = false
+      throw err
+    }
   }
 
   /**
@@ -296,12 +339,33 @@ export default class DBDotJSON {
 
     return Promise.resolve(this.opts.save(JSON.stringify(
       this.state, this.opts.json.replacer, this.opts.json.humanReadable
-    ))).then(() => {
-      return this
-    }).catch(error => {
+    ))).then(() => this).catch(error => {
       var err = new DatabaseError("Couldn't save the Database.", 2, error)
       err.inner = error
       throw err
     })
+  }
+
+  /**
+    * Manually save the database synchronously
+    * By default you can't save the database if it's not loaded
+    * @param force force the save of the database
+    * @returns {DBDotJSON}
+    */
+  saveSync(force = false) {
+    if (!force && !this.loaded)
+      throw new DatabaseError("DataBase not loaded. Can't write.", 7)
+
+    try {
+      var data = JSON.stringify(
+        this.state, this.opts.json.replacer, this.opts.json.humanReadable
+      )
+      this.opts.save(data)
+      return this
+    } catch (error) {
+      var err = new DatabaseError("Couldn't save the Database.", 2, error)
+      err.inner = error
+      throw err
+    }
   }
 }

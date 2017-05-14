@@ -4,7 +4,7 @@
   "description": "A near fork of @Belphemur/node-json-db with more options and Bower/requireJS compatibility.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run build && node test",
     "build": "babel lib --out-dir _ && babel db.js --out-file _db.js",
     "prepublish": "npm run build",
     "postpublish": "npm run clean",
