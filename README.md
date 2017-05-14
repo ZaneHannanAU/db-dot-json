@@ -16,9 +16,9 @@ If you would like a synchronous version of this module then please see the origi
 
 # Options
 
-* `filename` (type: `String` or `Array`): Where to save the data base or file name. Default `db.json`. When `Array`, join values with '/'
 * `opts` (type: `Object`):
-	* `file` (type: `String`): Overrides filename. Default `file === filename`.
+	* `file` (type: `String` or `Array`): Where to save the data base or file name. Default `db.json`. When `Array`, join values with '/'
+	* `filename` (type: `String`): Overrides file. Default `file === filename`.
 	* `saveOnPush` (type: `Boolean`): Saving on adding to the data. Default `true`.
 	* `saveOnDel` (type: `Boolean`): Saving on deleting any data. Default `saveOnDel === saveOnPush`.
 	* `init` (type: `*`): The initial state of the database. Default `{}`.

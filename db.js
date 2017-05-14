@@ -6,7 +6,6 @@ try {
 }
 let {utils, ParentData, DatabaseError, DataError} = required;
 
-
 /**
   * @class {DBDotJSON}
   * @author Zane Hannan AU
@@ -22,8 +21,8 @@ let {utils, ParentData, DatabaseError, DataError} = required;
   */
 export default class DBDotJSON {
 /** Create the JSON database
-  * @param {String} file - where to save the data base or file name. Required.
   * @param {Object} opts
+    * @param {String} file - where to save the data base or file name. Required.
     * @param {String} filename - overrides file.
     * @param {Boolean} saveOnPush - saving on adding to the data.
     * @param {Boolean} saveOnDel - saving on deleting any data.
@@ -41,30 +40,26 @@ export default class DBDotJSON {
     * @param {Function} save - should be synchronous or return a Promise.
   * @constructor
   */
-  constructor(filename = 'db.json', opts = {}) {
-    if (Array.isArray(filename))
-      filename = filename.join('/')
+  constructor({
+    file = 'db.json', filename = file,
+    saveOnPush = true, saveOnDel = saveOnPush,
+    init = {}, overwrite = true,
+    replacer = null, humanReadable = 0, reviver = null,
+    exists = (file) => require('fs').existsSync(file),
+    mkdir = (folder) => require('mkdirp').sync(folder),
+    dirname = (dir) => require('path').dirname(dir),
+    read = (name = file) => require('fs').readFileSync(name, 'utf8'),
+    save = (data,name=file) => require('fs').writeFileSync(name,data,'utf8'),
+    presetup = () => {try{this.loadSync()}catch(e){this.saveSync(true)}}
+  }) {
+    this.loaded = false
+    this.state = init
 
-    if (!filename)
+    if (Array.isArray(file))
+      file = filename = file.join('/')
+
+    if (!file)
       throw new SyntaxError('File (argument 0) must exist and be a string.')
-
-    const {
-      file = filename, saveOnPush = true, saveOnDel = saveOnPush,
-      init = {}, overwrite = true,
-      replacer = null, humanReadable = 0, reviver = null,
-      exists = (file) => require('fs').existsSync(file),
-      mkdir = (folder) => require('mkdirp').sync(folder),
-      dirname = (dir) => require('path').dirname(dir),
-      read = (name = file) => require('fs').readFileSync(name, 'utf8'),
-      save = (data,name=file) => require('fs').writeFileSync(name,data,'utf8'),
-      presetup = () => {
-        try {
-          this.load()
-        } catch (e) {
-          this.save(true)
-        }
-      }
-    } = opts
 
     this.opts = {
       filename, saveOnPush, saveOnDel, exists, mkdir,
@@ -72,11 +67,8 @@ export default class DBDotJSON {
         replacer, humanReadable, reviver
       }
     }
-    this.file = file
-    this.filename = file.endsWith('.json') ? file : (file+'.json')
-
-    this.loaded = false
-    this.state = init
+    this.file = filename
+    this.filename = filename.endsWith('.json') ? filename : (filename+'.json')
 
     this.saveOnPush = this.opts.saveOnPush
     this.saveOnDel = this.opts.saveOnDel
@@ -85,11 +77,12 @@ export default class DBDotJSON {
     if (typeof presetup === 'function')
       presetup()
 
-    Promise.resolve(exists(filename)).then(e => {
+    Promise.resolve(exists(this.filename)).then(e => {
       if (!e) {
         this.dirname = typeof dirname === 'string' ? dirname : dirname(filename)
         mkdir(this.dirname)
         this.save(true)
+        this.loaded = true
       }
     })
   }
@@ -140,12 +133,14 @@ export default class DBDotJSON {
     * @private
     */
   __getData(dataPath, create = false) {
+    console.log('%s: %j', '__getData', {dataPath, create});
     return this.load().then(() => {
       if (dataPath.length === 0)
         return this.state
 
       const recursiveProcessDataPath = (data, idx) => {
         var prop = dataPath[idx]
+        console.log('%s: %j', '__getData', {data, idx, prop});
         /**
           * Find or create the wanted data.
           */
@@ -203,10 +198,11 @@ export default class DBDotJSON {
     * @param {*} data - data to push
     * @param {Boolean} overwrite - overriding or not the data, if not, it will merge them
     * @param {Boolean} save - whether to save or not after pushing.
-    * @returns {DBDotJSON}
+    * @returns {Promise}
+    * - Will resolve to {DBDotJSON} if saved without errors.
+    * - Will reject if an error occurs.
     */
   push(dataPath, data, overwrite = this.overwrite, save = this.saveOnPush) {
-    dataPath = utils.removeEdgeSlashes(dataPath)
 
     return this.__getParentData(dataPath, true).then(dbData => {
       if (!dbData)
@@ -241,10 +237,11 @@ export default class DBDotJSON {
     * Delete data
     * @param dataPath - path leading to the data
     * @param save - whether to save or not after deleting data
-    * @returns {DBDotJSON}
+    * @returns {Promise}
+    * - Will resolve to {DBDotJSON} if saved without errors.
+    * - Will reject if an error occurs.
     */
   delete(dataPath, save = this.saveOnDel) {
-    dataPath = utils.removeEdgeSlashes(dataPath)
     return new Promise((resolve, reject) => {
       this.__getParentData(dataPath, true).then(dbData => {
         if (!dbData)
@@ -296,11 +293,9 @@ export default class DBDotJSON {
       this.state = JSON.parse(data, this.opts.json.reviver)
       this.loaded = true
       return this
-    }).catch(error => {
-      var err = new DatabaseError("Couldn't load the Database.", 1, error)
-      err.inner = error
+    }).catch(err => {
       this.loaded = false
-      throw err
+      throw new DatabaseError("Couldn't load the Database.", 1, err)
     })
   }
   /**
@@ -316,12 +311,11 @@ export default class DBDotJSON {
     try {
       var data = this.opts.read(this.filename)
       this.state = JSON.parse(data, this.opts.json.reviver)
+      this.loaded = true
       return this
-    } catch (error) {
-      var err = new DatabaseError("Couldn't load the Database.", 1, error)
-      err.inner = error
+    } catch (err) {
       this.loaded = false
-      throw err
+      throw new DatabaseError("Couldn't load the Database.", 1, error)
     }
   }
 
@@ -335,14 +329,19 @@ export default class DBDotJSON {
     */
   save(force = false) {
     if (!force && !this.loaded)
-      return Promise.reject(new DatabaseError("DataBase not loaded. Can't write.", 7))
+      return Promise.reject(
+        new DatabaseError("DataBase not loaded. Can't write.", 7)
+      )
 
-    return Promise.resolve(this.opts.save(JSON.stringify(
-      this.state, this.opts.json.replacer, this.opts.json.humanReadable
-    ))).then(() => this).catch(error => {
-      var err = new DatabaseError("Couldn't save the Database.", 2, error)
-      err.inner = error
-      throw err
+    return Promise.resolve(
+      this.opts.save(
+        JSON.stringify(
+          this.state, this.opts.json.replacer, this.opts.json.humanReadable
+        ), this.filename
+      )
+    )
+    .then(() => this).catch(err => {
+      throw new DatabaseError("Couldn't save the Database.", 2, err)
     })
   }
 
@@ -360,12 +359,10 @@ export default class DBDotJSON {
       var data = JSON.stringify(
         this.state, this.opts.json.replacer, this.opts.json.humanReadable
       )
-      this.opts.save(data)
+      this.opts.save(data, this,filename)
       return this
-    } catch (error) {
-      var err = new DatabaseError("Couldn't save the Database.", 2, error)
-      err.inner = error
-      throw err
+    } catch (err) {
+      throw new DatabaseError("Couldn't save the Database.", 2, err)
     }
   }
 }
