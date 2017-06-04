@@ -1,14 +1,14 @@
 {
   "name": "db-dot-json",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A near fork of @Belphemur/node-json-db with more options and Bower/requireJS compatibility.",
   "main": "index.js",
   "scripts": {
     "test": "npm run build && node test",
-    "build": "babel lib --out-dir _ && babel db.js --out-file _db.js",
+    "build": "babel db.js --out-file _db.js",
     "prepublish": "npm run build",
     "postpublish": "npm run clean",
-    "clean": "rm -r _db.js _"
+    "clean": "rm _db.js"
   },
   "repository": {
     "type": "git",
